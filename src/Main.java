@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Scanner;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.List;
 
 public class Main {
     /** Writer for logging output to file */
@@ -124,6 +125,22 @@ public class Main {
         rollControl = new DirectionControlStable("Roll", -180, 180, config);
         pitchControl = new DirectionControlStable("Pitch", -90, 90, config);
         yawControl = new DirectionControlStable("Yaw", -180, 180, config);
+
+        String scriptPath = params.getOrDefault("script", "maneuvers.csv");
+        File maneuversFile = new File(scriptPath);
+
+        ManeuverScript script;
+        try {
+            script = ManeuverScript.load(maneuversFile);
+        } catch (ManeuverScript.ScriptFormatException e) {
+            System.err.println(e.getMessage());
+            System.exit(1);
+            return;
+        } catch (IOException e) {
+            System.err.println("Error reading script file: " + e.getMessage());
+            System.exit(1);
+            return;
+        }
 
         // Clear screen and hide cursor for clean visualization (only when the
         // terminal supports ANSI escape sequences).

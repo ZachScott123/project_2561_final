@@ -1,0 +1,12 @@
+stage,description,rollTarget,pitchTarget,yawTarget,durationMs
+
+1,Initial stable level flight,0,0,0,8000
+2,Level flight,0,0,0,8000
+3,Ultra-gentle right turn,2,0,2,12000
+4,Back to level,0,0,0,8000
+5,Ultra-gentle left turn,-2,0,-2,12000
+6,Back to level,0,0,0,8000
+7,Very gentle climb,0,-5,0,10000
+8,Back to level,0,0,0,8000
+9,Very gentle descent,0,3,0,10000
+10,Return to level flight,0,0,0,10000
