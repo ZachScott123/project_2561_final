@@ -319,8 +319,11 @@ public class Main {
             long backoffMillis = 100;
             final long maxBackoffMillis = 5000;
             final long resetAfterMillis = 10_000;
+            final long restartWindowMillis = 30_000;
+            final int maxRestartsInWindow = 5;
             long lastFailureTime = System.currentTimeMillis();
             Random random = new Random();
+            java.util.Deque<Long> failureTimestamps = new java.util.ArrayDeque<>();
 
             while (running.get()) {
                 try {
@@ -355,9 +358,21 @@ public class Main {
                     break;
                 } catch (Throwable t) {
                     String name = Thread.currentThread().getName();
+                    long now = System.currentTimeMillis();
+                    failureTimestamps.addLast(now);
+                    while (!failureTimestamps.isEmpty() && failureTimestamps.peekFirst() < now - restartWindowMillis) {
+                        failureTimestamps.removeFirst();
+                    }
+
+                    if (failureTimestamps.size() >= maxRestartsInWindow) {
+                        System.err.println("worker \"turbulence\" exceeded restart budget; will not be restarted.");
+                        logToFile("worker \"turbulence\" exceeded restart budget; will not be restarted.");
+                        break;
+                    }
+
                     System.err.println("[Worker:" + name + "] exception, restarting after " + backoffMillis + "ms");
                     t.printStackTrace(System.err);
-                    lastFailureTime = System.currentTimeMillis();
+                    lastFailureTime = now;
 
                     try {
                         Thread.sleep(backoffMillis);

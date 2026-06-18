@@ -80,3 +80,13 @@ Suggestion summary:
 GitHub Copilot answered that the failure should be injected in `src/Main.java` inside `createTurbulenceThread(...)`, within the inner `while (running.get())` loop after the turbulence jitter is applied and before `Thread.sleep(200)`.
 Decision: Accepted
 Why: Placing the forced exception there simulates a worker failure during normal turbulence processing and validates the supervisor/backoff behavior.
+
+## Session 2 – 2026-06-18 17:13
+Task: Task 3 (Restart budget enforcement)
+Tool: GitHub Copilot Chat
+Prompt (verbatim):
+> Now I need to make it so that in task 3, restart attempts are LIMITED. If just one singular worker accumulates five restarts within the span of 30 seconds, it must five up permanently. It must then log the following: 'worker "turbulence" exceeded restart budget; will not be restarted.' the rest of the simulation then continues on. Explain to me how I can go about doing this and walk me through where to implement the code.
+Suggestion summary:
+GitHub Copilot added restart-budget tracking inside `createTurbulenceThread(...)` in `src/Main.java`. The thread now records failure timestamps, evicts entries older than 30 seconds, and stops permanently after 5 failures in that window while logging the required message.
+Decision: Accepted
+Why: Limiting restarts prevents a runaway crash-restart loop and allows the rest of the simulation to continue once the turbulence worker has exceeded its budget.
