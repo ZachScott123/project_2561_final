@@ -316,30 +316,60 @@ public class Main {
     private static Thread createTurbulenceThread(DirectionControl roll, DirectionControl pitch, DirectionControl yaw,
                                          AtomicBoolean turbulenceEnabled, AtomicBoolean running) {
         return new Thread(() -> {
+            long backoffMillis = 100;
+            final long maxBackoffMillis = 5000;
+            final long resetAfterMillis = 10_000;
+            long lastFailureTime = System.currentTimeMillis();
             Random random = new Random();
 
             while (running.get()) {
                 try {
-                    // Only apply turbulence if enabled
-                    if (turbulenceEnabled.get()) {
-                        // Create random jitter values to simulate turbulence
-                        double rollJitter = (random.nextDouble() - 0.5) * 2.0;
-                        double pitchJitter = (random.nextDouble() - 0.5) * 1.5;
-                        double yawJitter = (random.nextDouble() - 0.5) * 1.0;
+                    while (running.get()) {
+                        // Only apply turbulence if enabled
+                        if (turbulenceEnabled.get()) {
+                            // Create random jitter values to simulate turbulence
+                            double rollJitter = (random.nextDouble() - 0.5) * 2.0;
+                            double pitchJitter = (random.nextDouble() - 0.5) * 1.5;
+                            double yawJitter = (random.nextDouble() - 0.5) * 1.0;
 
-                        // Apply jitter
-                        roll.setCurrentValue(roll.getCurrentValue() + rollJitter);
-                        pitch.setCurrentValue(pitch.getCurrentValue() + pitchJitter);
-                        yaw.setCurrentValue(yaw.getCurrentValue() + yawJitter);
+                            // Apply jitter
+                            roll.setCurrentValue(roll.getCurrentValue() + rollJitter);
+                            pitch.setCurrentValue(pitch.getCurrentValue() + pitchJitter);
+                            yaw.setCurrentValue(yaw.getCurrentValue() + yawJitter);
+                            //throw new RuntimeException("test failure");
+                        }
+
+                        Thread.sleep(200);
+
+                        long now = System.currentTimeMillis();
+                        if (now - lastFailureTime >= resetAfterMillis) {
+                            if (backoffMillis != 100) {
+                                System.out.println("[Worker:" + Thread.currentThread().getName() + "] running successfully for 10s, resetting backoff to 100ms");
+                            }
+                            backoffMillis = 100;
+                        }
                     }
-
-                    Thread.sleep(200);
+                    break;
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     break;
+                } catch (Throwable t) {
+                    String name = Thread.currentThread().getName();
+                    System.err.println("[Worker:" + name + "] exception, restarting after " + backoffMillis + "ms");
+                    t.printStackTrace(System.err);
+                    lastFailureTime = System.currentTimeMillis();
+
+                    try {
+                        Thread.sleep(backoffMillis);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+
+                    backoffMillis = Math.min(maxBackoffMillis, backoffMillis * 2);
                 }
             }
-        });
+        }, "TurbulenceWorker");
     }
 
     /**
