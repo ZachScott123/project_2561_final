@@ -166,7 +166,7 @@ public class Main {
         // Create and start threads
         Thread userInputThread = createInputThread(rollControl, pitchControl, yawControl, turbulenceEnabled, running);
         Thread turbulenceThread = createTurbulenceThread(rollControl, pitchControl, yawControl, turbulenceEnabled, running);
-        Thread automatedDemoThread = createAutomatedDemoThread(rollControl, pitchControl, yawControl, script);
+        Thread automatedDemoThread = createAutomatedDemoThread(rollControl, pitchControl, yawControl, script, running);
 
         userInputThread.start();
         turbulenceThread.start();
@@ -181,7 +181,9 @@ public class Main {
         // tells the GUI to throttle its frame rate when the host is under load.
         ResourceMonitor resourceMonitor = new ResourceMonitor(1000, gui::setPerformanceLevel);
         gui.setResourceMonitor(resourceMonitor);
-        Thread resourceMonitorThread = resourceMonitor.start();
+        Thread resourceMonitorThread = createResourceMonitorThread(resourceMonitor, running);
+        resourceMonitorThread.setDaemon(true);
+        resourceMonitorThread.start();
 
         gui.show();
         
@@ -315,84 +317,37 @@ public class Main {
      */
     private static Thread createTurbulenceThread(DirectionControl roll, DirectionControl pitch, DirectionControl yaw,
                                          AtomicBoolean turbulenceEnabled, AtomicBoolean running) {
-        return new Thread(() -> {
-            long backoffMillis = 100;
-            final long maxBackoffMillis = 5000;
-            final long resetAfterMillis = 10_000;
-            final long restartWindowMillis = 30_000;
-            final int maxRestartsInWindow = 5;
-            long lastFailureTime = System.currentTimeMillis();
+        Runnable turbulenceWork = () -> {
             Random random = new Random();
-            java.util.Deque<Long> failureTimestamps = new java.util.ArrayDeque<>();
-
             while (running.get()) {
+                if (turbulenceEnabled.get()) {
+                    double rollJitter = (random.nextDouble() - 0.5) * 2.0;
+                    double pitchJitter = (random.nextDouble() - 0.5) * 1.5;
+                    double yawJitter = (random.nextDouble() - 0.5) * 1.0;
+
+                    roll.setCurrentValue(roll.getCurrentValue() + rollJitter);
+                    pitch.setCurrentValue(pitch.getCurrentValue() + pitchJitter);
+                    yaw.setCurrentValue(yaw.getCurrentValue() + yawJitter);
+                }
+
                 try {
-                    while (running.get()) {
-                        // Only apply turbulence if enabled
-                        if (turbulenceEnabled.get()) {
-                            // Create random jitter values to simulate turbulence
-                            double rollJitter = (random.nextDouble() - 0.5) * 2.0;
-                            double pitchJitter = (random.nextDouble() - 0.5) * 1.5;
-                            double yawJitter = (random.nextDouble() - 0.5) * 1.0;
-
-                            // Apply jitter
-                            roll.setCurrentValue(roll.getCurrentValue() + rollJitter);
-                            pitch.setCurrentValue(pitch.getCurrentValue() + pitchJitter);
-                            yaw.setCurrentValue(yaw.getCurrentValue() + yawJitter);
-                            //throw new RuntimeException("test failure");
-                        }
-
-                        Thread.sleep(200);
-
-                        long now = System.currentTimeMillis();
-                        if (now - lastFailureTime >= resetAfterMillis) {
-                            if (backoffMillis != 100) {
-                                System.out.println("[Worker:" + Thread.currentThread().getName() + "] running successfully for 10s, resetting backoff to 100ms");
-                            }
-                            backoffMillis = 100;
-                        }
-                    }
-                    break;
+                    Thread.sleep(200);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     break;
-                } catch (Throwable t) {
-                    String name = Thread.currentThread().getName();
-                    long now = System.currentTimeMillis();
-                    failureTimestamps.addLast(now);
-                    while (!failureTimestamps.isEmpty() && failureTimestamps.peekFirst() < now - restartWindowMillis) {
-                        failureTimestamps.removeFirst();
-                    }
-
-                    if (failureTimestamps.size() >= maxRestartsInWindow) {
-                        System.err.println("worker \"turbulence\" exceeded restart budget; will not be restarted.");
-                        logToFile("worker \"turbulence\" exceeded restart budget; will not be restarted.");
-                        break;
-                    }
-
-                    System.err.println("[Worker:" + name + "] exception, restarting after " + backoffMillis + "ms");
-                    t.printStackTrace(System.err);
-                    lastFailureTime = now;
-
-                    try {
-                        Thread.sleep(backoffMillis);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
-
-                    backoffMillis = Math.min(maxBackoffMillis, backoffMillis * 2);
                 }
             }
-        }, "TurbulenceWorker");
+        };
+
+        return new Thread(new SupervisedRunner("turbulence", turbulenceWork, running::get), "TurbulenceWorker");
     }
 
     /**
      * Creates a thread that automatically demonstrates various flight maneuvers
      * without requiring user input - using ultra-gentle transitions
      */
-    private static Thread createAutomatedDemoThread(DirectionControl roll, DirectionControl pitch, DirectionControl yaw, ManeuverScript script) {
-        return new Thread(() -> {
+    private static Thread createAutomatedDemoThread(DirectionControl roll, DirectionControl pitch, DirectionControl yaw, ManeuverScript script, AtomicBoolean running) {
+        Runnable automatedDemoWork = () -> {
             try {
                 // Allow time for the simulation to start
                 Thread.sleep(3000); // Longer initial delay
@@ -404,8 +359,9 @@ public class Main {
                 yaw.setTargetValue(0);
                 Thread.sleep(8000);  // 8 seconds of stable flight
                 
-                while (true) {
+                while (running.get()) {
                     for (ManeuverScript.Maneuver m : script.getManeuvers()) {
+                        if (!running.get()) break;
                         System.out.println(String.format("\nDemonstrating: hold=%.1fs roll=%.1f pitch=%.1f yaw=%.1f",
                             m.getSeconds(), m.getRoll(), m.getPitch(), m.getYaw()));
 
@@ -415,10 +371,17 @@ public class Main {
 
                         Thread.sleep((long) (m.getSeconds() * 1000));
                     }
-                } 
+                }
             } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
                 System.out.println("Demo thread interrupted.");
             }
-        });
+        };
+
+        return new Thread(new SupervisedRunner("automated-demo", automatedDemoWork, running::get), "AutomatedDemoWorker");
+    }
+
+    private static Thread createResourceMonitorThread(ResourceMonitor resourceMonitor, AtomicBoolean running) {
+        return new Thread(new SupervisedRunner("resource-monitor", resourceMonitor, running::get), "ResourceMonitorWorker");
     }
 }

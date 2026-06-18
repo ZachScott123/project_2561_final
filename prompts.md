@@ -90,3 +90,33 @@ Suggestion summary:
 GitHub Copilot added restart-budget tracking inside `createTurbulenceThread(...)` in `src/Main.java`. The thread now records failure timestamps, evicts entries older than 30 seconds, and stops permanently after 5 failures in that window while logging the required message.
 Decision: Accepted
 Why: Limiting restarts prevents a runaway crash-restart loop and allows the rest of the simulation to continue once the turbulence worker has exceeded its budget.
+
+## Session 2 – 2026-06-18 17:18
+Task: Task 3 (SupervisedRunner)
+Tool: GitHub Copilot Chat
+Prompt (verbatim):
+> Now, I need to add a class "SupervisedRunner" that will take a worker name, the Runnable to run, and a BooleanSupplier that will say whether or not the simulation is actively still running.
+Suggestion summary:
+GitHub Copilot explained that `SupervisedRunner` should be a reusable class accepting a worker name, a work `Runnable`, and a `BooleanSupplier` that reports whether the simulation is still active.
+Decision: Accepted
+Why: This cleanly separates worker supervision setup from the worker logic.
+
+## Session 2 – 2026-06-18 17:22
+Task: Task 3 (SupervisedRunner)
+Tool: GitHub Copilot Chat
+Prompt (verbatim):
+> I need its own run method to be a loop that does the work, this run method will catch an Exception as well as any RuntimeException, it performs the logging and backoff above, and then iterates. This loop should exit cleanly whenever the supplier returns false. Walk me through how to do this, step by step.
+Suggestion summary:
+GitHub Copilot described implementing `run()` as a supervision loop that catches exceptions, applies the logging/backoff policy, enforces restart budgets, and exits cleanly when the simulation stops.
+Decision: Accepted
+Why: This separates the supervised loop behavior from the class signature, making the implementation easier to understand and review.
+
+## Session 2 – 2026-06-18 17:54
+Task: Task 3 (Supervisor application to workers)
+Tool: GitHub Copilot Chat
+Prompt (verbatim):
+> I now need to apply the supervisor to at least three existing threads within my code. The turbulance thread, the automated demo thread, and the resource monitor. The supervisor is not needed for short-lived setup threads or the swing edt. Please do this and show me how it works.
+Suggestion summary:
+GitHub Copilot should update the simulation startup to wrap the turbulence, automated demo, and resource monitor workers with `SupervisedRunner`, while leaving short-lived setup threads and the Swing EDT unaltered. The assistant should explain the new structure and why the supervisor is applied only to those long-lived background threads.
+Decision: Accepted
+Why: This keeps the prompt history aligned with the exact request and documents the worker supervision refactor clearly.
