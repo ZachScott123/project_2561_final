@@ -27,3 +27,23 @@ Suggestion summary:
 GitHub Copilot suggested adding a custom `DirectionControlListener` interface, using a thread-safe listener list, and notifying listeners when `currentValue` changes. The first part focused on refactoring `DirectionControl` to support observers.
 Decision: Accepted
 Why: Splitting the work makes the refactor safer by isolating the model-side observer support first.
+
+## Session 2 – 2026-06-18 16:10
+Task: Task 2 (Observer pattern implementation part 2)
+Tool: GitHub Copilot Chat
+Prompt (verbatim):
+> Now show how to connect the GUI to those "DirectionControl" listeners so it updates on change and avoids polling the controls every timer tick.
+Suggestion summary:
+GitHub Copilot suggested registering `DirectionControl` listeners in `AircraftGUI`, updating GUI state on the Swing EDT using `SwingUtilities.invokeLater(...)`, and removing repeated `getCurrentValue()` polling from the timer update path. This part focused on wiring the model-to-view observer flow.
+Decision: Accepted
+Why: Connecting the GUI through listeners instead of polling creates a cleaner, event-driven update path and reduces unnecessary UI thread work.
+
+## Session 2 – 2026-06-18 16:20
+Task: Task 2 (Observer pattern implementation part 4)
+Tool: GitHub Copilot Chat
+Prompt (verbatim):
+> I need to make sure that my code does not call any swing method from directly inside of the listener.
+Suggestion summary:
+GitHub Copilot suggested removing all direct Swing calls from the listener callback and instead updating only thread-safe orientation state. The Swing Timer or EDT-based repaint path then reads that state and updates the display, keeping Swing interaction on the EDT.
+Decision: Accepted
+Why: The listener now only updates `volatile` state fields for roll/pitch/yaw, and the GUI update path remains responsible for calling Swing methods on the EDT.

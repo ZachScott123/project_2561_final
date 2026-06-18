@@ -108,9 +108,9 @@ public class AircraftGUI {
     private ResourceMonitor resourceMonitor;
 
     // Aircraft state variables
-    private double roll = 0.0;
-    private double pitch = 0.0;
-    private double yaw = 0.0;
+    private volatile double roll = 0.0;
+    private volatile double pitch = 0.0;
+    private volatile double yaw = 0.0;
     private double flightSpeed = 250.0;
     private double currentAltitude = 11000.0;
     private double targetAltitude = 11000.0;
@@ -161,23 +161,21 @@ public class AircraftGUI {
     }
 
     private void handleOrientationChange(String axis, double newValue) {
-        SwingUtilities.invokeLater(() -> {
-            switch (axis) {
-                case "roll":
-                    roll = newValue;
-                    if (panel != null) panel.setRoll(newValue);
-                    break;
-                case "pitch":
-                    pitch = newValue;
-                    if (panel != null) panel.setPitch(newValue);
-                    break;
-                case "yaw":
-                    yaw = newValue;
-                    if (panel != null) panel.setYaw(newValue);
-                    break;
-            }
-            if (panel != null) panel.repaint();
-        });
+        // Do not call Swing methods directly from the listener thread.
+        // This method only updates the thread-safe orientation state.
+        switch (axis) {
+            case "roll":
+                roll = newValue;
+                break;
+            case "pitch":
+                pitch = newValue;
+                break;
+            case "yaw":
+                yaw = newValue;
+                break;
+            default:
+                break;
+        }
     }
 
     private void unregisterDirectionControlObservers() {
