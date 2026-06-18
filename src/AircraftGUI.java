@@ -108,6 +108,9 @@ public class AircraftGUI {
     private ResourceMonitor resourceMonitor;
 
     // Aircraft state variables
+    // These values are written by background listener callbacks and are read by the Swing EDT.
+    // Using volatile, guarantees safe publication across all threads so the GUI never sees a stale value.
+    // The listener updates state only, and actual Swing repainting is handled separately on the EDT.
     private volatile double roll = 0.0;
     private volatile double pitch = 0.0;
     private volatile double yaw = 0.0;

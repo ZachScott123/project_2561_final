@@ -48,6 +48,9 @@ GitHub Copilot suggested removing all direct Swing calls from the listener callb
 Decision: Accepted
 Why: The listener now only updates `volatile` state fields for roll/pitch/yaw, and the GUI update path remains responsible for calling Swing methods on the EDT.
 
+Safe publication note:
+The GUI uses volatile fields for roll/pitch/yaw so listener threads when writing become immediately visible to the EDT reader. This basically ensures that the UI gets the latest orientation value without receiving any stale memory reads, keeping actual Swing painting on the event thread.
+
 ## Session 2 – 2026-06-18 16:35
 Task: Task 3 (Worker thread self-healing part 1)
 Tool: GitHub Copilot Chat
