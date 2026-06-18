@@ -13,7 +13,6 @@ import java.util.ArrayList;
 import java.util.Random;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
-import javax.swing.Timer;
 
 /**
  * Professional aircraft simulation controller with multithreaded architecture.
@@ -131,6 +130,14 @@ public class AircraftGUI {
     // Animation timer
     private Timer timer;
     private Random random = new Random();
+
+    private DirectionControl.DirectionControlListener rollListener;
+    private DirectionControl.DirectionControlListener pitchListener;
+    private DirectionControl.DirectionControlListener yawListener;
+
+    /**
+     * Added listeners for the DirectionControl instances. This allows the gui to react to these changes.
+     */
     
     // UI Components
     private JFrame frame;
@@ -138,6 +145,46 @@ public class AircraftGUI {
     
     // Fonts for text displays
     private Font mediumFont = new Font("Arial", Font.BOLD, 16);
+
+    private void registerDirectionControlObservers() {
+        rollListener = (source, newValue) -> handleOrientationChange("roll", newValue);
+        pitchListener = (source, newValue) -> handleOrientationChange("pitch", newValue);
+        yawListener = (source, newValue) -> handleOrientationChange("yaw", newValue);
+
+        rollControl.addListener(rollListener);
+        pitchControl.addListener(pitchListener);
+        yawControl.addListener(yawListener);
+
+        handleOrientationChange("roll", rollControl.getCurrentValue());
+        handleOrientationChange("pitch", pitchControl.getCurrentValue());
+        handleOrientationChange("yaw", yawControl.getCurrentValue());
+    }
+
+    private void handleOrientationChange(String axis, double newValue) {
+        SwingUtilities.invokeLater(() -> {
+            switch (axis) {
+                case "roll":
+                    roll = newValue;
+                    if (panel != null) panel.setRoll(newValue);
+                    break;
+                case "pitch":
+                    pitch = newValue;
+                    if (panel != null) panel.setPitch(newValue);
+                    break;
+                case "yaw":
+                    yaw = newValue;
+                    if (panel != null) panel.setYaw(newValue);
+                    break;
+            }
+            if (panel != null) panel.repaint();
+        });
+    }
+
+    private void unregisterDirectionControlObservers() {
+        if (rollListener != null) rollControl.removeListener(rollListener);
+        if (pitchListener != null) pitchControl.removeListener(pitchListener);
+        if (yawListener != null) yawControl.removeListener(yawListener);
+    }
 
     /**
      * Creates the GUI bound to the simulation's three orientation controls.
@@ -181,6 +228,7 @@ public class AircraftGUI {
     public void show() {
         SwingUtilities.invokeLater(() -> {
             createAndShowGUI();
+            registerDirectionControlObservers(); //calling function to register listeners for the DirectionControl instances
             startMultithreadedSimulation();
             System.out.println("Aircraft simulation GUI is now visible");
         });
@@ -369,11 +417,6 @@ public class AircraftGUI {
         long currentTime = System.currentTimeMillis();
         double timeSeconds = (currentTime - simulationStartTime) / 1000.0;
 
-        // Read orientation from the simulation's control instances.
-        roll = rollControl.getCurrentValue();
-        pitch = pitchControl.getCurrentValue();
-        yaw = yawControl.getCurrentValue();
-
         // Altitude tracking: move toward targetAltitude at up to 500 ft/min.
         double altitudeDifference = targetAltitude - currentAltitude;
         double climbRate = Math.min(Math.max(altitudeDifference / 10.0, -500), 500);
@@ -489,6 +532,8 @@ public class AircraftGUI {
         if (timer != null) {
             timer.stop();
         }
+
+        unregisterDirectionControlObservers(); //calling to ensure listeners are removed upon shutdown.
         
         // Shutdown thread pools
         scheduler.shutdown();
@@ -503,6 +548,7 @@ public class AircraftGUI {
                 executor.shutdownNow();
             }
         } catch (InterruptedException e) {
+            unregisterDirectionControlObservers(); //calling to ensure listeners are removed if shutdown is interrupted
             scheduler.shutdownNow();
             executor.shutdownNow();
             Thread.currentThread().interrupt();

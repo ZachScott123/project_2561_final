@@ -7,6 +7,12 @@
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+/**
+ * Import statements that are necessary for the functionality of the listeners below.
+ */
 
 /**
  * Direction control system for an aircraft axis. Manages a current value and a
@@ -60,39 +66,78 @@ public class DirectionControl {
     }
 
     /**
+     * Added Listeners for adding, removing, notifying changes in current value.
+     */
+
+    private final List<DirectionControlListener> listeners = new CopyOnWriteArrayList<>();
+
+    public interface DirectionControlListener {
+        void currentValueChanged(DirectionControl source, double newValue);
+    }
+
+    public void addListener(DirectionControlListener listener) {
+        if (listener != null) listeners.add(listener);
+    }
+
+    public void removeListener(DirectionControlListener listener) {
+        listeners.remove(listener);
+    }
+
+    private void notifyListeners(double newValue) {
+        for (DirectionControlListener listener : listeners) {
+            listener.currentValueChanged(this, newValue);
+        }
+    }
+
+    /**
      * Update the current value based on the physics model and target.
      */
-    public synchronized void update() {
-        double deviation = targetValue - currentValue;
+    public void update() {
+        double oldValue;
+        double newValue;
 
-        if (trackStatistics) {
-            totalDeviation += Math.abs(deviation);
-            maxDeviation = Math.max(maxDeviation, Math.abs(deviation));
-            sampleCount++;
+        /**
+         * Changed the update function to work with notifyListeners when the value changes.
+         */
+
+        synchronized (this) {
+            double deviation = targetValue - currentValue;
+            oldValue = currentValue;
+
+            if (trackStatistics) {
+                totalDeviation += Math.abs(deviation);
+                maxDeviation = Math.max(maxDeviation, Math.abs(deviation));
+                sampleCount++;
+            }
+
+            Main.logToCSV(name, targetValue, currentValue, velocity);
+
+            if (Math.abs(deviation) < tolerance && Math.abs(velocity) < 0.1) {
+                velocity = 0;
+                return;
+            }
+
+            velocity += deviation / inertia;
+            velocity *= dampening;
+
+            if (velocity > maxStep) velocity = maxStep;
+            if (velocity < -maxStep) velocity = -maxStep;
+
+            currentValue += velocity;
+
+            if (currentValue < min) {
+                currentValue = min;
+                velocity = 0;
+            } else if (currentValue > max) {
+                currentValue = max;
+                velocity = 0;
+            }
+
+            newValue = currentValue;
         }
 
-        Main.logToCSV(name, targetValue, currentValue, velocity);
-
-        // Skip adjustment if we're already close enough.
-        if (Math.abs(deviation) < tolerance && Math.abs(velocity) < 0.1) {
-            velocity = 0;
-            return;
-        }
-
-        velocity += deviation / inertia;
-        velocity *= dampening;
-
-        if (velocity > maxStep) velocity = maxStep;
-        if (velocity < -maxStep) velocity = -maxStep;
-
-        currentValue += velocity;
-
-        if (currentValue < min) {
-            currentValue = min;
-            velocity = 0;
-        } else if (currentValue > max) {
-            currentValue = max;
-            velocity = 0;
+        if (Math.abs(newValue - oldValue) > 1e-6) {
+            notifyListeners(newValue);
         }
     }
 
@@ -105,7 +150,18 @@ public class DirectionControl {
     }
 
     public synchronized double getCurrentValue() { return currentValue; }
-    public synchronized void setCurrentValue(double value) { this.currentValue = value; }
+    public void setCurrentValue(double value) {
+        double oldValue;
+        double newValue;
+        synchronized (this) {
+            oldValue = currentValue;
+            currentValue = Math.max(min, Math.min(max, value));
+            newValue = currentValue;
+        }
+        if (Math.abs(newValue - oldValue) > 1e-6) {
+            notifyListeners(newValue);
+        }
+    }
 
     public synchronized double getTargetValue() { return targetValue; }
     public synchronized void setTargetValue(double value) {
